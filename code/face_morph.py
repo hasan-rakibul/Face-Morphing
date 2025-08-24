@@ -14,7 +14,14 @@ def apply_affine_transform(src, srcTri, dstTri, size) :
     warpMat = cv2.getAffineTransform(np.float32(srcTri), np.float32(dstTri))
     
     # Apply the Affine Transform just found to the src image
-    dst = cv2.warpAffine(src, warpMat, (size[0], size[1]), None, flags=cv2.INTER_LINEAR, borderMode=cv2.BORDER_REFLECT_101)
+    # dst = cv2.warpAffine(src, warpMat, (size[0], size[1]), None, flags=cv2.INTER_LINEAR, borderMode=cv2.BORDER_REFLECT_101)
+    # dst = cv2.warpAffine(src, warpMat, (size[0], size[1]), None, flags=cv2.INTER_CUBIC, borderMode=cv2.BORDER_REFLECT_101)
+    dst = cv2.warpAffine(
+        src, warpMat, (size[0], size[1]), None, 
+        flags=cv2.INTER_LANCZOS4, # slower but sharpest
+        borderMode=cv2.BORDER_REFLECT_101
+    )
+    
 
     return dst
 
@@ -39,7 +46,8 @@ def morph_triangle(img1, img2, img, t1, t2, t, alpha) :
 
     # Get mask by filling triangle
     mask = np.zeros((r[3], r[2], 3), dtype = np.float32)
-    cv2.fillConvexPoly(mask, np.int32(tRect), (1.0, 1.0, 1.0), 16, 0)
+    # cv2.fillConvexPoly(mask, np.int32(tRect), (1.0, 1.0, 1.0), 16, 0)
+    cv2.fillConvexPoly(mask, np.int32(tRect), (1.0, 1.0, 1.0), lineType=cv2.LINE_AA)
 
     # Apply warpImage to small rectangular patches
     img1Rect = img1[r1[1]:r1[1] + r1[3], r1[0]:r1[0] + r1[2]]
@@ -62,12 +70,11 @@ def generate_morph_sequence(duration,frame_rate,img1,img2,points1,points2,tri_li
     if save_as_video:
         p = Popen(['ffmpeg', '-y', '-f', 'image2pipe', '-r', str(frame_rate),'-s',str(size[1])+'x'+str(size[0]), '-i', '-', '-c:v', 'libx264', '-crf', '25','-vf','scale=trunc(iw/2)*2:trunc(ih/2)*2','-pix_fmt','yuv420p', output], stdin=PIPE)
     
+    # Convert Mat to float data type
+    img1 = np.float32(img1)
+    img2 = np.float32(img2)
+
     for j in range(0, num_images):
-
-        # Convert Mat to float data type
-        img1 = np.float32(img1)
-        img2 = np.float32(img2)
-
         # Read array of corresponding points
         points = []
         alpha = j/(num_images-1)
@@ -79,7 +86,8 @@ def generate_morph_sequence(duration,frame_rate,img1,img2,points1,points2,tri_li
             points.append((x,y))
         
         # Allocate space for final output
-        morphed_frame = np.zeros(img1.shape, dtype = img1.dtype)
+        # morphed_frame = np.zeros(img1.shape, dtype = img1.dtype)
+        morphed_frame = (1.0 - alpha) * img1 + alpha * img2 # belended background
 
         for i in range(len(tri_list)):    
             x = int(tri_list[i][0])
@@ -104,7 +112,7 @@ def generate_morph_sequence(duration,frame_rate,img1,img2,points1,points2,tri_li
             
         res = Image.fromarray(cv2.cvtColor(np.uint8(morphed_frame), cv2.COLOR_BGR2RGB))
         if save_as_img:
-            save_name = f"results/frame_{j:04d}.jpg"
+            save_name = f"results/frame_{j:04d}.png"
             res.save(save_name)
             print(f"Saved {save_name}")
         if save_as_video:
