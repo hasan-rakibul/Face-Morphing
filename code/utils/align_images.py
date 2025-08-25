@@ -1,10 +1,9 @@
 import os
-import sys
 import bz2
 import argparse
+from pathlib import Path
 from face_alignment import image_align
 from landmarks_detector import LandmarksDetector
-import multiprocessing
 
 def unpack_bz2(src_path):
     data = bz2.BZ2File(src_path).read()
@@ -30,26 +29,25 @@ if __name__ == "__main__":
 
     args, other_args = parser.parse_known_args()
 
-    RAW_IMAGES_DIR = args.raw_dir
-    ALIGNED_IMAGES_DIR = args.aligned_dir
+    RAW_IMAGES_DIR = Path(args.raw_dir)
+    ALIGNED_IMAGES_DIR = Path(args.aligned_dir)
 
     landmarks_detector = LandmarksDetector()
-    for img_name in os.listdir(RAW_IMAGES_DIR):
+    for img_name in RAW_IMAGES_DIR.iterdir():
+        if not img_name.is_file():
+            continue
         print('Aligning %s ...' % img_name)
         try:
-            raw_img_path = os.path.join(RAW_IMAGES_DIR, img_name)
-            fn = face_img_name = '%s_%02d.png' % (os.path.splitext(img_name)[0], 1)
-            if os.path.isfile(fn):
-                continue
+            raw_img_path = str(img_name)
             print('Getting landmarks...')
             for i, face_landmarks in enumerate(landmarks_detector.get_landmarks(raw_img_path), start=1):
                 try:
                     print('Starting face alignment...')
-                    face_img_name = '%s_%02d.png' % (os.path.splitext(img_name)[0], i)
-                    aligned_face_path = os.path.join(ALIGNED_IMAGES_DIR, face_img_name)
+                    face_img_name = str(img_name.name)
+                    aligned_face_path = ALIGNED_IMAGES_DIR / face_img_name
                     image_align(raw_img_path, aligned_face_path, face_landmarks, output_size=args.output_size, x_scale=args.x_scale, y_scale=args.y_scale, em_scale=args.em_scale, alpha=args.use_alpha)
                     print('Wrote result %s' % aligned_face_path)
-                except:
-                    print("Exception in face alignment!")
-        except:
-            print("Exception in landmark detection!")
+                except Exception as e:
+                    print(f"Exception in face alignment: {e}")
+        except Exception as e:
+            print(f"Exception in landmark detection: {e}")
